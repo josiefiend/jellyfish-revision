@@ -1,7 +1,8 @@
 /* Final Project JELLYFISH
-   BMP180, TSL2561, and VL5L0X (Temperature, light, and distance!) sensors communicate with MQTT server!
+   BMP180 and TSL2561 (Temperature and light!) sensors communicate with MQTT server!
    API data to retrieve sensor IP, Geolocation, and NOAA ocean data
    The module is subscribed to MQTT channels and takes action based on messages
+   TODO: Add distance sensor (need to solder)
 */
 
 #include "config.h" // config.h contains WiFi and Adafruit IO connection information
@@ -14,6 +15,7 @@
 #include <ESP8266HTTPClient.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#define FASTLED_FORCE_SOFTWARE_SPI // This is for FastLED performance on the ESP8266
 #include <FastLED.h> // Library for LEDs
 #include <Servo.h> // Library for servo
 
@@ -26,22 +28,24 @@
 
 #define DEBUG 1 // Debug mode flag to control sketch behavior for testing (e.g. when true, print additional info to serial)
 #define MQTTDEBUG 0 // Debug mode flag to control sketch behavior for testing (e.g. when true, don't connect to MQTT, print additional info to serial)
-#define FASTLED_FORCE_SOFTWARE_SPI // This is for FastLED performance on the ESP8266
 #define LED_DATA_PIN 4 // Data pin for APA102 (DotStar) LED strip
-#define LED_CLOCK_PIN 5 // Clock pin for APA102 (DotStar) LED strip
-#define NUM_LEDS 170 // Number of LEDs on APA102 to control
+#define LED_CLK_PIN 5 // Clock pin for APA102 (DotStar) LED strip
+//#define LED_TYPE    APA102
+//#define COLOR_ORDER BGR
+#define NUM_LEDS 10 // Number of LEDs on APA102 to control
 CRGB leds[NUM_LEDS]; // Define array of LEDs for FastLED
+#define BRIGHTNESS          96
+#define FRAMES_PER_SECOND  120
 #define SERVO_PIN 2  // Pin for movement
 
 // Create sensors
-Adafruit_BMP085_Unified bmp = Adafruit_BMP085_Unified(10085); // I2C ADRR 0x77
-Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(TSL2561_ADDR_FLOAT, 12345); // I2C ADDR is 0x29
-Adafruit_VL53L0X lox = Adafruit_VL53L0X(); // I2C ADDR 0x39
+Adafruit_BMP085_Unified bmp = Adafruit_BMP085_Unified(10085); //0x77
+Adafruit_TSL2561_Unified tsl = Adafruit_TSL2561_Unified(TSL2561_ADDR_FLOAT, 12345); //ADDR LOW is 0x29
+Adafruit_VL53L0X lox = Adafruit_VL53L0X(); // ADDR 0x39
 
 Servo myservo;  // Create servo object for movement
 
 // JELLYFISH STATES
-int defaultState; // Flag for lighting LEDs
 int predatorDetected; // Flag for predator response
 int lightNeeded; // Flag for lighting LEDs
 int oceanWarming; // Color change test
@@ -83,8 +87,9 @@ typedef struct { //here we create a new data type definition, a box to hold othe
 OceanData ocean; // Create an instance of Ocean
 
 void setup() { // This code runs once
-  // Start the serial connection
-  Serial.begin(115200);
+  Wire.begin(12, 14); // Set I2C to run on pins 12 and 14 for all sensors, since SPI is using 4/5 for LEDs
+  
+  Serial.begin(115200);   // Start the serial connection
 
   // Get the sensor module's geolocation when setting up (calls getIP())
   setupWiFi();
@@ -132,10 +137,15 @@ void setup() { // This code runs once
   }
 
   // Add LEDs
-  FastLED.addLeds<APA102, LED_DATA_PIN, LED_CLOCK_PIN, BGR>(leds, NUM_LEDS); // My strip is BGR for some reason
+  FastLED.addLeds<APA102, LED_DATA_PIN, LED_CLK_PIN, BGR>(leds, NUM_LEDS);
+  for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+    leds[i] = CRGB::Blue; // Set LED strip to orange
+    FastLED.show(); // Push to LED
+  }
 
   // Add servo
   myservo.attach(SERVO_PIN);  // attaches the servo on GIO2 to the servo object
+
 }
 
 void loop() {
@@ -143,10 +153,83 @@ void loop() {
 
   unsigned long currentMillis = millis(); // Timer
 
-  if (!MQTTDEBUG) { // If not in MQTT debug mode, do this
-    mqtt.loop(); // Keep MQTT connection active
-    if (!mqtt.connected()) {
-      reconnect();
+  if (!mqtt.connected()) {
+    reconnect();
+  }
+  mqtt.loop(); // Keep MQTT connection active
+
+
+  //  // COLOR & STATES
+  //  FastLED.clear();
+  //  leds[0] = CRGB::Red;
+  //  leds[1] = CRGB::Salmon;
+  //  leds[2] = CRGB::Green;
+  //  //Serial.println(lightNeeded);
+  //  CRGB color = CRGB::Red;
+  //  if (lightNeeded) { // If MQTT message says it's dark but it's calm, turn on the light with fun color!
+  //    color = CRGB::Salmon;
+  //  }
+  //  for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
+  //    leds[i] = color; // Set LED strip to x
+  //  }
+  //
+  //  FastLED.show(); // Push to LED
+
+  if (lightNeeded && !oceanWarming) { // If MQTT message says it's dark but it's calm, turn on the light with fun color!
+    if (lightColor == "Yellow") {
+      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+        leds[i] = CRGB::Yellow; // Set LED strip to yellow
+        //mqtt.loop(); // Check for incoming status
+      }
+    }
+    else if (lightColor == "Salmon") {
+      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+        leds[i] = CRGB::Salmon; // Set LED strip to orange
+        //mqtt.loop(); // Check for incoming status
+      }
+    }
+    else if (lightColor == "Green") {
+      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+        leds[i] = CRGB::YellowGreen; // Set LED strip to yellowgreen
+        //mqtt.loop(); // Check for incoming status
+      }
+    }
+    else if (lightColor == "Aqua") {
+      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+        leds[i] = CRGB::Aqua; // Set LED strip to aqua
+        //mqtt.loop(); // Check for incoming status
+      }
+    }
+    mqtt.loop(); // Check for incoming status
+  }
+  else if (lightNeeded && oceanWarming) { // If it's dark and stormy, make the lights red
+    for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+      leds[i] = CRGB::Red; // Set LED strip to red
+      //mqtt.loop(); // Check for incoming status
+    }
+  }
+  else {
+    for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+      leds[i] = CRGB::Black; // Set LED strip to black ("turn off")
+      mqtt.loop(); // Check for incoming status
+    }
+    mqtt.loop(); // Check for incoming status
+  }
+  FastLED.show(); // Push to LED
+
+  if (predatorDetected) { // If the flag is set, move the servo
+    int pos;
+    for (pos = 0; pos <= 180; pos += 1) // goes from 0 degrees to 180 degrees
+    { // in steps of 1 degree
+      myservo.write(pos); // tell servo to go to position in variable 'pos'
+      delay(15); // waits 15ms for the servo to reach the position
+      mqtt.loop(); // Check for incoming status
+    }
+    for (pos = 180; pos >= 0; pos -= 1) // goes from 180 degrees to 0 degrees
+    {
+      myservo.write(pos); // tell servo to go to position in variable 'pos'
+      delay(15); // waits 15ms for the servo to reach the position
+      mqtt.loop(); // Check for incoming status
     }
   }
 
@@ -234,72 +317,6 @@ void loop() {
       mqtt.publish("jellyfish/Predator", messageDistance); // Publish this message to the Light subtopic
       mqtt.publish("jellyfish/WaterTemperature", messageOceanTemp); // Publish this message to the Light subtopic
       timerOne = currentMillis; // Update timer for this loop; used for sensors and MQTT publishing
-    }
-
-    // COLOR & STATES
-
-    if (lightNeeded && !oceanWarming) { // If MQTT message says it's dark there is no warming
-      defaultState = true;
-      if (lightColor == "Yellow") {
-        for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
-          leds[i] = CRGB::Yellow; // Set LED strip to yellow
-          FastLED.show(); // Push to LED
-          mqtt.loop(); // Check for incoming status
-        }
-      }
-      else if (lightColor == "Salmon") {
-        for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
-          leds[i] = CRGB::Salmon; // Set LED strip to orange
-          FastLED.show(); // Push to LED
-          mqtt.loop(); // Check for incoming status
-        }
-      }
-      else if (lightColor == "Green") {
-        for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
-          leds[i] = CRGB::YellowGreen; // Set LED strip to yellowgreen
-          FastLED.show(); // Push to LED
-          mqtt.loop(); // Check for incoming status
-        }
-      }
-      else if (lightColor == "Aqua") {
-        for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
-          leds[i] = CRGB::Aqua; // Set LED strip to aqua
-          FastLED.show(); // Push to LED
-          mqtt.loop(); // Check for incoming status
-        }
-      }
-      mqtt.loop(); // Check for incoming status
-    }
-    else if (lightNeeded && oceanWarming) { // If it's dark and the ocean is too hot, make the lights red
-      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
-        leds[i] = CRGB::Red; // Set LED strip to red
-        FastLED.show(); // Push to LED
-        mqtt.loop(); // Check for incoming status
-      }
-    }
-    else {
-      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
-        leds[i] = CRGB::Black; // Set LED strip to black ("turn off")
-        FastLED.show(); // Push to LED
-        mqtt.loop(); // Check for incoming status
-      }
-      mqtt.loop(); // Check for incoming status
-    }
-
-    if (predatorDetected) { // If the flag is set, move the servo
-      int pos;
-      for (pos = 0; pos <= 180; pos += 1) // goes from 0 degrees to 180 degrees
-      { // in steps of 1 degree
-        myservo.write(pos); // tell servo to go to position in variable 'pos'
-        delay(15); // waits 15ms for the servo to reach the position
-        mqtt.loop(); // Check for incoming status
-      }
-      for (pos = 180; pos >= 0; pos -= 1) // goes from 180 degrees to 0 degrees
-      {
-        myservo.write(pos); // tell servo to go to position in variable 'pos'
-        delay(15); // waits 15ms for the servo to reach the position
-        mqtt.loop(); // Check for incoming status
-      }
     }
   }
 }
