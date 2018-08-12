@@ -1,8 +1,7 @@
 /* Final Project JELLYFISH
-   BMP180 and TSL2561 (Temperature and light!) sensors communicate with MQTT server!
+   BMP180, VL53L0X, and TSL2561 (Temperature, distance, and light!) sensors communicate with MQTT server!
    API data to retrieve sensor IP, Geolocation, and NOAA ocean data
-   The module is subscribed to MQTT channels and takes action based on messages
-   TODO: Add distance sensor (need to solder)
+   The module is subscribed to MQTT channels and takes action (light and movement) based on messages
 */
 
 #include "config.h" // config.h contains WiFi and Adafruit IO connection information
@@ -15,7 +14,6 @@
 #include <ESP8266HTTPClient.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
-#define FASTLED_FORCE_SOFTWARE_SPI // This is for FastLED performance on the ESP8266
 #include <FastLED.h> // Library for LEDs
 #include <Servo.h> // Library for servo
 
@@ -30,12 +28,8 @@
 #define MQTTDEBUG 0 // Debug mode flag to control sketch behavior for testing (e.g. when true, don't connect to MQTT, print additional info to serial)
 #define LED_DATA_PIN 4 // Data pin for APA102 (DotStar) LED strip
 #define LED_CLK_PIN 5 // Clock pin for APA102 (DotStar) LED strip
-//#define LED_TYPE    APA102
-//#define COLOR_ORDER BGR
-#define NUM_LEDS 10 // Number of LEDs on APA102 to control
+#define NUM_LEDS 60 // Number of LEDs on APA102 to control
 CRGB leds[NUM_LEDS]; // Define array of LEDs for FastLED
-#define BRIGHTNESS          96
-#define FRAMES_PER_SECOND  120
 #define SERVO_PIN 2  // Pin for movement
 
 // Create sensors
@@ -49,7 +43,6 @@ Servo myservo;  // Create servo object for movement
 int predatorDetected; // Flag for predator response
 int lightNeeded; // Flag for lighting LEDs
 int oceanWarming; // Color change test
-int oceanCooling; // Color change test
 String lightColor; // Color for LED strip
 
 // Set up MQTT
@@ -88,7 +81,7 @@ OceanData ocean; // Create an instance of Ocean
 
 void setup() { // This code runs once
   Wire.begin(12, 14); // Set I2C to run on pins 12 and 14 for all sensors, since SPI is using 4/5 for LEDs
-  
+
   Serial.begin(115200);   // Start the serial connection
 
   // Get the sensor module's geolocation when setting up (calls getIP())
@@ -138,84 +131,60 @@ void setup() { // This code runs once
 
   // Add LEDs
   FastLED.addLeds<APA102, LED_DATA_PIN, LED_CLK_PIN, BGR>(leds, NUM_LEDS);
-  for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
-    leds[i] = CRGB::Blue; // Set LED strip to orange
-    FastLED.show(); // Push to LED
-  }
 
   // Add servo
-  myservo.attach(SERVO_PIN);  // attaches the servo on GIO2 to the servo object
+  myservo.attach(SERVO_PIN);
 
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-
   unsigned long currentMillis = millis(); // Timer
 
-  if (!mqtt.connected()) {
+  if (!mqtt.connected()) { // Connect to MQTT
     reconnect();
   }
   mqtt.loop(); // Keep MQTT connection active
 
-
-  //  // COLOR & STATES
-  //  FastLED.clear();
-  //  leds[0] = CRGB::Red;
-  //  leds[1] = CRGB::Salmon;
-  //  leds[2] = CRGB::Green;
-  //  //Serial.println(lightNeeded);
-  //  CRGB color = CRGB::Red;
-  //  if (lightNeeded) { // If MQTT message says it's dark but it's calm, turn on the light with fun color!
-  //    color = CRGB::Salmon;
-  //  }
-  //  for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
-  //    leds[i] = color; // Set LED strip to x
-  //  }
-  //
-  //  FastLED.show(); // Push to LED
+  // LED BEHAVIORS
 
   if (lightNeeded && !oceanWarming) { // If MQTT message says it's dark but it's calm, turn on the light with fun color!
     if (lightColor == "Yellow") {
-      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+      for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
         leds[i] = CRGB::Yellow; // Set LED strip to yellow
-        //mqtt.loop(); // Check for incoming status
       }
     }
     else if (lightColor == "Salmon") {
-      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+      for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
         leds[i] = CRGB::Salmon; // Set LED strip to orange
-        //mqtt.loop(); // Check for incoming status
       }
     }
     else if (lightColor == "Green") {
-      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+      for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
         leds[i] = CRGB::YellowGreen; // Set LED strip to yellowgreen
-        //mqtt.loop(); // Check for incoming status
       }
     }
     else if (lightColor == "Aqua") {
-      for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+      for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
         leds[i] = CRGB::Aqua; // Set LED strip to aqua
-        //mqtt.loop(); // Check for incoming status
       }
     }
     mqtt.loop(); // Check for incoming status
   }
   else if (lightNeeded && oceanWarming) { // If it's dark and stormy, make the lights red
-    for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+    for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
       leds[i] = CRGB::Red; // Set LED strip to red
-      //mqtt.loop(); // Check for incoming status
     }
   }
   else {
-    for (int i; i < NUM_LEDS; i++) { // Loop through the LED array
+    for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
       leds[i] = CRGB::Black; // Set LED strip to black ("turn off")
       mqtt.loop(); // Check for incoming status
     }
     mqtt.loop(); // Check for incoming status
   }
   FastLED.show(); // Push to LED
+
+  // MOTION BEHAVIORS
 
   if (predatorDetected) { // If the flag is set, move the servo
     int pos;
@@ -232,6 +201,8 @@ void loop() {
       mqtt.loop(); // Check for incoming status
     }
   }
+
+  // SENSORS & COMMUNICATIONS
 
   if (currentMillis - timerOne > 5000) { // Timer for sensors, do this every 5 seconds
 
@@ -525,9 +496,9 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
   }
 }
 
-// TO GET WEATHER ALERT DATA
+// TO GET API DATA
 
-String getIP() { // First get the IP address for the jellyfish
+String getIP() { // First get the IP address for the jellyfish [NOT CURRENTLY USING; ONLY NEEDED FOR GEOIP]
   HTTPClient theClient;
   String ipAddress;
 
@@ -552,7 +523,7 @@ String getIP() { // First get the IP address for the jellyfish
   return ipAddress;
 }
 
-void getLocation() { // Get the location (latitude and longitude) based on IP
+void getLocation() { // Get the location (latitude and longitude) based on IP  [NOT CURRENTLY USING THIS BECAUSE SERVICE IS $, NEED TO FIND NEW ONE]
   HTTPClient theClient;
   theClient.begin("http://api.ipstack.com/" + getIP() + "?access_key=" + geoAccessKey); // default returns JSON
   int httpCode = theClient.GET();
@@ -588,50 +559,7 @@ void getLocation() { // Get the location (latitude and longitude) based on IP
   }
 }
 
-void getMet() { // Get the weather for the given latitude and longitude
-  HTTPClient theClient; // Create HTTPClient
-
-  String apiCall = "http://api.openweathermap.org/data/2.5/weather?"; // this API defaults to JSON
-  String weatherLocation = "lat=" + location.lt + "&lon=" + location.ln; // Call location by GEO coordinates returned from GetGeo(). This requires only weather? with no q= in URL
-  apiCall += weatherLocation; // Add the city name (or lat & lon if using that) to the call
-  apiCall += "&APPID="; // The URL string needs to include this to take an API key
-  apiCall += weather_API_KEY; // Add the API key to the URL string
-  apiCall += "&units=imperial"; // US units
-  theClient.begin(apiCall); // Make Open Weather API call using formed URL
-  int httpCode = theClient.GET(); // Make a get request and store resulting HTTP code as int
-
-  if (httpCode > 0) { // if valid HTTP code returned
-    if (httpCode == 200) { // 200 OK
-
-      DynamicJsonBuffer jsonBuffer; // Create buffer
-
-      String payload = theClient.getString(); // Store data returned HTTPClient into payload
-      JsonObject& root = jsonBuffer.parse(payload); // Parse payload
-
-      // Test if parsing succeeds. Tell us if failed.
-      if (!root.success()) {
-        Serial.println("parseObject() failed");
-        return;
-      }
-
-      //Some debugging lines below:
-      //Serial.println(payload);
-      //root.printTo(Serial);
-
-      //Using .dot language, we refer to the variable "weather" which is of
-      //type MetData, and place our data into the data structure.
-
-      incoming.windspeed = root["wind"]["speed"].as<String>();
-      incoming.winddir = root["wind"]["deg"].as<String>();
-      incoming.cloud = root["clouds"]["all"].as<String>();
-
-    } else {
-      Serial.println("Something went wrong with connecting to the weather endpoint."); // If not a 200 OK, something needs to be fixed
-    }
-  }
-}
-
-void getNOAA() { // Get the weather for the given latitude and longitude
+void getNOAA() { // Get NOAA data for the given location [GEO CURRENTLY NOT USED; HARD CODED WEATHER STATION IN PUGET SOUND]
   HTTPClient theClient; // Create HTTPClient
 
   String apiCall = "https://tidesandcurrents.noaa.gov/api/datagetter?date=latest&station=9447130&product=water_temperature&datum=STND&units=english&time_zone=lst&application=citizen&format=json"; // ask for JSON
@@ -657,10 +585,7 @@ void getNOAA() { // Get the weather for the given latitude and longitude
       //Serial.println(payload);
       //root.printTo(Serial);
 
-      //Using .dot language, we refer to the variable "weather" which is of
-      //type OceanData, and place our data into the data structure.
-
-      ocean.water_temperature = root["data"][0]["v"].as<String>();
+      ocean.water_temperature = root["data"][0]["v"].as<String>(); // Read results & save
 
     } else {
       Serial.println("Something went wrong with connecting to the NOAA endpoint."); // If not a 200 OK, something needs to be fixed
