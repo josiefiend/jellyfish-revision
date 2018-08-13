@@ -1,7 +1,8 @@
 /* Final Project JELLYFISH
-   BMP180, VL53L0X, and TSL2561 (Temperature, distance, and light!) sensors communicate with MQTT server!
+   BMP180 and TSL2561 (Temperature and light!) sensors communicate with MQTT server!
    API data to retrieve sensor IP, Geolocation, and NOAA ocean data
-   The module is subscribed to MQTT channels and takes action (light and movement) based on messages
+   The module is subscribed to MQTT channels and takes action based on messages
+   TODO: Add distance sensor (need to solder)
 */
 
 #include "config.h" // config.h contains WiFi and Adafruit IO connection information
@@ -44,6 +45,9 @@ int predatorDetected; // Flag for predator response
 int lightNeeded; // Flag for lighting LEDs
 int oceanWarming; // Color change test
 String lightColor; // Color for LED strip
+unsigned long startTime; // Timer for LED patterns
+int waterFill; // For default LED pattern
+
 
 // Set up MQTT
 WiFiClient espClient; // Create ESP client
@@ -64,14 +68,6 @@ typedef struct { //here we create a new data type definition, a box to hold othe
 } LocationData;     //then we give our new data structure a name so we can use it in our code
 
 LocationData location; // Create an instance of LocationData
-
-typedef struct { //here we create a new data type definition, a box to hold other data types
-  String windspeed;
-  String winddir;
-  String cloud;
-} StormData;     //then we give our new data structure a name so we can use it in our code
-
-StormData incoming; // Create an instance of StormData
 
 typedef struct { //here we create a new data type definition, a box to hold other data types
   String water_temperature;
@@ -131,6 +127,7 @@ void setup() { // This code runs once
 
   // Add LEDs
   FastLED.addLeds<APA102, LED_DATA_PIN, LED_CLK_PIN, BGR>(leds, NUM_LEDS);
+  startTime = millis(); // Timer for light patterns
 
   // Add servo
   myservo.attach(SERVO_PIN);
@@ -148,45 +145,24 @@ void loop() {
   // LED BEHAVIORS
 
   if (lightNeeded && !oceanWarming) { // If MQTT message says it's dark but it's calm, turn on the light with fun color!
-    if (lightColor == "Yellow") {
-      for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
-        leds[i] = CRGB::Yellow; // Set LED strip to yellow
-      }
-    }
-    else if (lightColor == "Salmon") {
-      for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
-        leds[i] = CRGB::Salmon; // Set LED strip to orange
-      }
-    }
-    else if (lightColor == "Green") {
-      for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
-        leds[i] = CRGB::YellowGreen; // Set LED strip to yellowgreen
-      }
-    }
-    else if (lightColor == "Aqua") {
-      for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
-        leds[i] = CRGB::Aqua; // Set LED strip to aqua
-      }
-    }
-    mqtt.loop(); // Check for incoming status
+    defaultLED();
   }
   else if (lightNeeded && oceanWarming) { // If it's dark and stormy, make the lights red
-    for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
-      leds[i] = CRGB::Red; // Set LED strip to red
-    }
+    traverseLED();
   }
   else {
     for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
       leds[i] = CRGB::Black; // Set LED strip to black ("turn off")
-      mqtt.loop(); // Check for incoming status
     }
-    mqtt.loop(); // Check for incoming status
   }
+  mqtt.loop(); // Check for incoming status
   FastLED.show(); // Push to LED
+
 
   // MOTION BEHAVIORS
 
   if (predatorDetected) { // If the flag is set, move the servo
+    predatorLED();
     int pos;
     for (pos = 0; pos <= 180; pos += 1) // goes from 0 degrees to 180 degrees
     { // in steps of 1 degree
@@ -592,4 +568,47 @@ void getNOAA() { // Get NOAA data for the given location [GEO CURRENTLY NOT USED
     }
   }
   else Serial.println("COULDN'T CONNECT");
+}
+
+// LED PATTERNS
+
+void defaultLED() { // This is my default Jellyfish behavior; it loosely simulates water filling
+  for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
+    leds[i] = CRGB::Indigo; // Choose color
+  }
+  unsigned long timer = millis() - startTime;
+  int millisPerLight = 4000 / NUM_LEDS; // 4000 is an arbitrary choice
+  if (timer < 4000 - waterFill * millisPerLight) {
+    leds[timer / millisPerLight] = CRGB::Aqua; // Choose color
+  }
+  else {
+    startTime = millis(); // Reset timer
+    waterFill++;
+    if (waterFill > NUM_LEDS / 2) { // Set to fill halfway up the strip (just for aesthetics); can go up to NUM_LEDS - 1
+      waterFill = 0;
+    }
+  }
+  for (int i = 0; i < waterFill; i++) {
+    leds[NUM_LEDS - i - 1] = CRGB::Aqua; // Set last LED to dot color
+  }
+  FastLED.show();
+}
+
+void traverseLED() { // This pattern just moves a dot
+  for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
+    leds[i] = CRGB::PowderBlue; // Set LED strip to orange
+  }
+  unsigned long timer = millis() - startTime;
+  int millisPerLight = 6000 / NUM_LEDS;
+  if (timer < 6000) {
+    leds[timer / millisPerLight] = CRGB::Orange;
+  }
+  else {
+    startTime = millis(); // Reset timer
+  }
+  FastLED.show();
+}
+
+void predatorLED() {
+  FastLED.showColor(CRGB::Yellow);
 }
