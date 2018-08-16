@@ -83,7 +83,6 @@ void loop() {
   mqtt.loop(); // Check for incoming status
   FastLED.show(); // Push to LED
 
-
   // MOTION BEHAVIORS
 
   if (predatorDetected) { // If the flag is set, move the servo
@@ -213,7 +212,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
       Serial.println(); // Line for readability
     }
   }
-  else if (strcmp(topic, "jellyfish/Predator") == 0) { // If new water temperature data
+  else if (strcmp(topic, "jellyfish/Predator") == 0) { // If new predator data
     Serial.println("Incoming predator info!");
     int distanceValue = root["Predator Distance"].as<int>(); // read the value from the parsed string and set it to luxValue
     if (distanceValue < 50) {
@@ -261,7 +260,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
       Serial.println(); // Line for readability
     }
   }
-  else if (strcmp(topic, "jellyfish/Salinity") == 0) { // If new water temperature data
+  else if (strcmp(topic, "jellyfish/Salinity") == 0) { // If new salinty data
     Serial.println("Incoming salinity info!");
     int salinity = root["Salinity"].as<int>(); // read the value from the parsed string and set it to luxValue
     if (30 <= salinity && salinity <= 35) {
