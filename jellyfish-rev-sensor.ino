@@ -33,7 +33,8 @@ Adafruit_VL53L0X lox = Adafruit_VL53L0X(); // ADDR 0x39
 // JELLYFISH STATES
 int predatorDetected; // Flag for predator response
 int lightNeeded; // Flag for lighting LEDs
-int oceanWarming; // Color change test
+int oceanWarming; // Flag for optimal water temperature (60-77 F)
+int idealSalinity; // Flag for optimal salinity (30-34 ppt)
 String lightColor; // Color for LED strip
 unsigned long startTime; // Timer for LED patterns
 int waterFill; // For default LED pattern
@@ -47,6 +48,7 @@ char messageTemp[201]; // Array for messages; size 401, as last character in the
 char messageLight[201]; // Array for messages; size 401, as last character in the array is the NULL character, denoting the end of the array
 char messageOceanTemp[201]; // Array for messages; size 401, as last character in the array is the NULL character, denoting the end of the array
 char messageDistance[201]; // Array for messages; size 401, as last character in the array is the NULL character, denoting the end of the array
+char messageSalinity[201]; // Array for messages; size 401, as last character in the array is the NULL character, denoting the end of the array
 unsigned long currentMillis, timerOne, timerTwo; // Timers to keep track of messaging intervals for MQTT & sensors
 
 // Set up data types for API data
@@ -140,6 +142,7 @@ void loop() {
     char str_temp[8]; // Temp arrays of size 8 to hold "XXXX.XX" + the terminating character
     char str_light[10];
     char str_distance[10];
+    char str_salinity[4];
 
     sensors_event_t event;
 
@@ -203,11 +206,14 @@ void loop() {
       sprintf(messageLight, "{\"Lux\":\"%s\"}", pStrLight); // Write light value to message
       sprintf(messageOceanTemp, "{\"Water Temperature\":\"%s\"}", ocean.water_temperature.c_str()); // Write wind speed value to message
       sprintf(messageDistance, "{\"Predator Distance\":\"%s\"}", pStrDistance); // Write distance sensor value to message
+      sprintf(messageSalinity, "{\"Salinity\":\"%s\"}", "32"); // Write hard-coded salinity value to message (couldn't find live API)
 
       mqtt.publish("jellyfish/Temperature", messageTemp); // Publish this message to the Temperature subtopic
       mqtt.publish("jellyfish/Light", messageLight); // Publish this message to the Light subtopic
-      mqtt.publish("jellyfish/Predator", messageDistance); // Publish this message to the Light subtopic
-      mqtt.publish("jellyfish/WaterTemperature", messageOceanTemp); // Publish this message to the Light subtopic
+      mqtt.publish("jellyfish/Predator", messageDistance); // Publish this message to the Predator subtopic
+      mqtt.publish("jellyfish/WaterTemperature", messageOceanTemp); // Publish this message to the Water Temperature subtopic
+      mqtt.publish("jellyfish/Salinity", messageSalinity); // Publish this message to the Salinity subtopic
+
       timerOne = currentMillis; // Update timer for this loop; used for sensors and MQTT publishing
     }
   }
@@ -305,6 +311,8 @@ void reconnect() {
   }
 }
 
+// SUBSCRIBE TO MQTT
+
 void callback(char* topic, byte * payload, unsigned int length) { // Attach listener to topics - attribution: brc 2018
   Serial.println();
   Serial.print("Message arrived [");
@@ -343,16 +351,16 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
       // Turn LED on if dark by setting light flag to true
       lightNeeded = 1;
       if (luxValue < 20) { // Change colors based on amount of light! (arbitrary values based on what I could test at home)
-        lightColor = "Yellow";
+        lightColor = "Orange";
       }
       else if (luxValue < 50) {
-        lightColor = "Salmon";
+        lightColor = "Fuchsia";
       }
       else if (luxValue < 150) {
         lightColor = "Green";
       }
       else {
-        lightColor = "Aqua";
+        lightColor = "Indigo";
       }
       if (DEBUG) { // If in debug mode, print info
         Serial.print("LIGHT FLAG: ");
@@ -370,7 +378,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
   else if (strcmp(topic, "jellyfish/Predator") == 0) { // If new water temperature data
     Serial.println("Incoming predator info!");
     int distanceValue = root["Predator Distance"].as<int>(); // read the value from the parsed string and set it to luxValue
-    if (distanceValue < 200) {
+    if (distanceValue < 50) {
       // Turn LED off if bright by setting light flag to false
       predatorDetected = 1;
       if (DEBUG) { // If in debug mode, print info
@@ -394,7 +402,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
   else if (strcmp(topic, "jellyfish/WaterTemperature") == 0) { // If new water temperature data
     Serial.println("Incoming water temperature info!");
     int waterTempValue = root["Water Temperature"].as<int>(); // read the value from the parsed string and set it to luxValue
-    if (waterTempValue > 70) {
+    if (waterTempValue > 80) {
       // Turn LED off if bright by setting light flag to false
       oceanWarming = 1;
       if (DEBUG) { // If in debug mode, print info
@@ -407,6 +415,30 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
       if (DEBUG) { // If in debug mode, print info
         Serial.print("WATER TEMPERATURE FLAG: ");
         Serial.println(oceanWarming);
+        Serial.println(); // Line for readability
+      }
+    }
+    if (DEBUG) { // If in debug mode, print info
+      root.printTo(Serial); // The parsed message
+      Serial.println(); // Line for readability
+    }
+  }
+  else if (strcmp(topic, "jellyfish/Salinity") == 0) { // If new water temperature data
+    Serial.println("Incoming salinity info!");
+    int salinity = root["Salinity"].as<int>(); // read the value from the parsed string and set it to luxValue
+    if (30 <= salinity && salinity <= 35) {
+      // Turn LED off if bright by setting light flag to false
+      idealSalinity = 1;
+      if (DEBUG) { // If in debug mode, print info
+        Serial.print("SALINITY FLAG: ");
+        Serial.println(idealSalinity);
+        Serial.println(); // Line for readability
+      }
+    } else {
+      idealSalinity = 0;
+      if (DEBUG) { // If in debug mode, print info
+        Serial.print("SALINITY FLAG: ");
+        Serial.println(idealSalinity);
         Serial.println(); // Line for readability
       }
     }
@@ -485,7 +517,7 @@ void getNOAA() { // Get NOAA data for the given location [GEO CURRENTLY NOT USED
 
   String apiCall = "https://tidesandcurrents.noaa.gov/api/datagetter?date=latest&station=9447130&product=water_temperature&datum=STND&units=english&time_zone=lst&application=citizen&format=json"; // ask for JSON
 
-  theClient.begin(apiCall, fingerprint); // Make Open Weather API call using formed URL
+  theClient.begin(apiCall, fingerprintNOAA); // Make Open Weather API call using formed URL
   int httpCode = theClient.GET(); // Make a get request and store resulting HTTP code as int
 
   if (httpCode > 0) { // if valid HTTP code returned
