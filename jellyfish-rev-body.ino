@@ -23,7 +23,8 @@ Servo myservo;  // Create servo object for movement
 // JELLYFISH STATES
 int predatorDetected; // Flag for predator response
 int lightNeeded; // Flag for lighting LEDs
-int oceanWarming; // Color change test
+int oceanWarming; // Flag for optimal water temperature (60-77 F)
+int idealSalinity; // Flag for optimal salinity (30-34 ppt)
 String lightColor; // Color for LED strip
 unsigned long startTime; // Timer for LED patterns
 int waterFill; // For default LED pattern
@@ -59,6 +60,7 @@ void setup() { // This code runs once
 
 void loop() {
   unsigned long currentMillis = millis(); // Timer
+  int salinity = 34; // Mocked out because I don't have a data source but am going to pretend via MQTT
 
   if (!mqtt.connected()) { // Connect to MQTT
     reconnect();
@@ -68,9 +70,9 @@ void loop() {
   // LED BEHAVIORS
 
   if (lightNeeded && !oceanWarming) { // If MQTT message says it's dark but it's calm, turn on the light with fun color!
-    defaultLED();
+    defaultLED(lightColor);
   }
-  else if (lightNeeded && oceanWarming) { // If it's dark and stormy, make the lights red
+  else if (lightNeeded && oceanWarming) { // If it's dark and too hot, show distress
     traverseLED();
   }
   else {
@@ -147,6 +149,8 @@ void reconnect() {
   }
 }
 
+// SUBSCRIBE TO MQTT
+
 void callback(char* topic, byte * payload, unsigned int length) { // Attach listener to topics - attribution: brc 2018
   Serial.println();
   Serial.print("Message arrived [");
@@ -185,16 +189,16 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
       // Turn LED on if dark by setting light flag to true
       lightNeeded = 1;
       if (luxValue < 20) { // Change colors based on amount of light! (arbitrary values based on what I could test at home)
-        lightColor = "Yellow";
+        lightColor = "Orange";
       }
       else if (luxValue < 50) {
-        lightColor = "Salmon";
+        lightColor = "Fuchsia";
       }
       else if (luxValue < 150) {
         lightColor = "Green";
       }
       else {
-        lightColor = "Aqua";
+        lightColor = "Indigo";
       }
       if (DEBUG) { // If in debug mode, print info
         Serial.print("LIGHT FLAG: ");
@@ -212,7 +216,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
   else if (strcmp(topic, "jellyfish/Predator") == 0) { // If new water temperature data
     Serial.println("Incoming predator info!");
     int distanceValue = root["Predator Distance"].as<int>(); // read the value from the parsed string and set it to luxValue
-    if (distanceValue < 200) {
+    if (distanceValue < 50) {
       // Turn LED off if bright by setting light flag to false
       predatorDetected = 1;
       if (DEBUG) { // If in debug mode, print info
@@ -236,7 +240,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
   else if (strcmp(topic, "jellyfish/WaterTemperature") == 0) { // If new water temperature data
     Serial.println("Incoming water temperature info!");
     int waterTempValue = root["Water Temperature"].as<int>(); // read the value from the parsed string and set it to luxValue
-    if (waterTempValue > 70) {
+    if (waterTempValue > 80) {
       // Turn LED off if bright by setting light flag to false
       oceanWarming = 1;
       if (DEBUG) { // If in debug mode, print info
@@ -257,39 +261,73 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
       Serial.println(); // Line for readability
     }
   }
+  else if (strcmp(topic, "jellyfish/Salinity") == 0) { // If new water temperature data
+    Serial.println("Incoming salinity info!");
+    int salinity = root["Salinity"].as<int>(); // read the value from the parsed string and set it to luxValue
+    if (30 <= salinity && salinity <= 35) {
+      // Turn LED off if bright by setting light flag to false
+      idealSalinity = 1;
+      if (DEBUG) { // If in debug mode, print info
+        Serial.print("SALINITY FLAG: ");
+        Serial.println(salinity);
+        Serial.println(); // Line for readability
+      }
+    } else {
+      idealSalinity = 0;
+      if (DEBUG) { // If in debug mode, print info
+        Serial.print("SALINITY FLAG: ");
+        Serial.println(idealSalinity);
+        Serial.println(); // Line for readability
+      }
+    }
+    if (DEBUG) { // If in debug mode, print info
+      root.printTo(Serial); // The parsed message
+      Serial.println(); // Line for readability
+    }
+  }
 }
 
 // LED PATTERNS
 
-void defaultLED() { // This is my default Jellyfish behavior; it loosely simulates water filling
+void defaultLED(String lightColor) { // This is my default Jellyfish behavior; it loosely simulates water filling
   for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
-    leds[i] = CRGB::Indigo; // Choose color
-  }
-  unsigned long timer = millis() - startTime;
-  int millisPerLight = 4000 / NUM_LEDS; // 4000 is an arbitrary choice
-  if (timer < 4000 - waterFill * millisPerLight) {
-    leds[timer / millisPerLight] = CRGB::Aqua; // Choose color
-  }
-  else {
-    startTime = millis(); // Reset timer
-    waterFill++;
-    if (waterFill > NUM_LEDS / 2) { // Set to fill halfway up the strip (just for aesthetics); can go up to NUM_LEDS - 1
-      waterFill = 0;
+    if (lightColor == "Orange") {
+      leds[i] = CRGB::OrangeRed; // Choose base color
     }
+    else if (lightColor == "Fuchsia") {
+      leds[i] = CRGB::Fuchsia; // Choose base color
+    }
+    else if (lightColor == "Green") {
+      leds[i] = CRGB::Green; // Choose base color
+    }
+    else if (lightColor == "Indigo") {
+      leds[i] = CRGB::Indigo; // Choose base color
+    }
+    unsigned long timer = millis() - startTime;
+    int millisPerLight = 3000 / NUM_LEDS; // 3000 is an arbitrary choice
+    if (timer < 3000 - waterFill * millisPerLight) {
+      leds[timer / millisPerLight] = CRGB::Aqua; // Choose color
+    }
+    else {
+      startTime = millis(); // Reset timer
+      waterFill++;
+      if (waterFill > NUM_LEDS / 2) { // Set to fill halfway up the strip (just for aesthetics); can go up to NUM_LEDS - 1
+        waterFill = 0;
+      }
+    }
+    for (int i = 0; i < waterFill; i++) {
+      leds[NUM_LEDS - i - 1] = CRGB::Aqua; // Set last LED to dot color
+    }
+    FastLED.show();
   }
-  for (int i = 0; i < waterFill; i++) {
-    leds[NUM_LEDS - i - 1] = CRGB::Aqua; // Set last LED to dot color
-  }
-  FastLED.show();
 }
-
 void traverseLED() { // This pattern just moves a dot
   for (int i = 0; i < NUM_LEDS; i++) { // Loop through the LED array
-    leds[i] = CRGB::PowderBlue; // Set LED strip to orange
+    leds[i] = CRGB::PowderBlue; // Set LED strip background to pale blue
   }
   unsigned long timer = millis() - startTime;
-  int millisPerLight = 6000 / NUM_LEDS;
-  if (timer < 6000) {
+  int millisPerLight = 5000 / NUM_LEDS;
+  if (timer < 5000) {
     leds[timer / millisPerLight] = CRGB::Orange;
   }
   else {
@@ -299,5 +337,11 @@ void traverseLED() { // This pattern just moves a dot
 }
 
 void predatorLED() {
-  FastLED.showColor(CRGB::Yellow);
+  unsigned long timer = millis() - startTime;
+  if (timer < 5000) {
+    FastLED.showColor(CRGB::Yellow);
+  }
+  else {
+    defaultLED("Indigo");
+  }
 }
