@@ -375,7 +375,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
       Serial.println(); // Line for readability
     }
   }
-  else if (strcmp(topic, "jellyfish/Predator") == 0) { // If new water temperature data
+  else if (strcmp(topic, "jellyfish/Predator") == 0) { // If new predator data
     Serial.println("Incoming predator info!");
     int distanceValue = root["Predator Distance"].as<int>(); // read the value from the parsed string and set it to luxValue
     if (distanceValue < 50) {
@@ -423,7 +423,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
       Serial.println(); // Line for readability
     }
   }
-  else if (strcmp(topic, "jellyfish/Salinity") == 0) { // If new water temperature data
+  else if (strcmp(topic, "jellyfish/Salinity") == 0) { // If new salinty data
     Serial.println("Incoming salinity info!");
     int salinity = root["Salinity"].as<int>(); // read the value from the parsed string and set it to luxValue
     if (30 <= salinity && salinity <= 35) {
@@ -431,7 +431,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
       idealSalinity = 1;
       if (DEBUG) { // If in debug mode, print info
         Serial.print("SALINITY FLAG: ");
-        Serial.println(idealSalinity);
+        Serial.println(salinity);
         Serial.println(); // Line for readability
       }
     } else {
