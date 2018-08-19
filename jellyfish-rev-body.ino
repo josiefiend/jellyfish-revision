@@ -90,7 +90,8 @@ void loop() {
   if (predatorDetected) { // If the flag is set, move the servo
     predatorLED(); // Run predator pattern
     moveServo(); // For continuous rotation servo
-    // FOR MICROSERVO
+
+    // FOR USING MICROSERVO
     //    int pos;
     //    for (pos = 0; pos <= 180; pos += 1) // goes from 0 degrees to 180 degrees
     //    { // in steps of 1 degree
@@ -102,12 +103,18 @@ void loop() {
     //      myservo.write(pos); // tell servo to go to position in variable 'pos'
     //      mqtt.loop(); // Check for incoming status
     //    }
-  } else myservo.writeMicroseconds(1500);     //stop
+  }
+  else {
+    myservo.writeMicroseconds(1500);     //stop
+  }
 
   if (!idealSalinity) {
-     moveServo(); // For continuous rotation servo
+    moveServo(); // For continuous rotation servo
   }
-  // FOR MICROSETVO
+  else {
+    myservo.writeMicroseconds(1500);     //stop
+  }
+  // FOR USING MICROSERVO
   //    int pos;
   //    for (pos = 0; pos <= 180; pos += 1) // goes from 0 degrees to 180 degrees
   //    { // in steps of 1 degree
@@ -412,9 +419,10 @@ void predatorLED() {
 void moveServo() { // This is for the continuous rotation Servo - added for Maker Faire Day 2
   unsigned long timer = millis() - startTime;
   if (timer < 1500) {
-    myservo.writeMicroseconds(3000);     // Turn
+    myservo.writeMicroseconds(3000); // Turn
   }
   else if (timer < 3000) {
-    myservo.writeMicroseconds(0);     // Reverse
+    myservo.writeMicroseconds(0); // Reverse Direction
   }
+  else myservo.writeMicroseconds(1500); // Stop
 }
