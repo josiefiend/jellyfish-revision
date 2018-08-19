@@ -36,6 +36,7 @@ int lightNeeded; // Flag for lighting LEDs
 int oceanWarming; // Flag for optimal water temperature (60-77 F)
 int idealSalinity; // Flag for optimal salinity (30-34 ppt)
 String lightColor; // Color for LED strip
+String dotColor; // Color for LED strip - movement
 unsigned long startTime; // Timer for LED patterns
 int waterFill; // For default LED pattern
 
@@ -73,8 +74,8 @@ void setup() { // This code runs once
   Serial.begin(115200);   // Start the serial connection
 
   // Get the sensor module's geolocation when setting up (calls getIP())
-  setupWiFi();
-  //  getLocation();
+  // setupWiFi();
+  // getLocation();
   //  if (DEBUG) {
   //    Serial.println("The sensor is located at (approximately) ");
   //    Serial.println(location.lt + " latitude by " + location.ln + " longitude.");
@@ -269,7 +270,7 @@ void displayBMPSensorDetails(void)
 // COMMUNICATION FUNCTIONS
 
 void MQTTSetup() { // Set up MQTT - attribution: brc 2018
-  //setupWiFi();
+  setupWiFi();
   mqtt.setServer(mqtt_server, 1883); // Server name, port
   mqtt.setCallback(callback); //register the callback function
   timerOne = millis(); // Starting counts
@@ -300,8 +301,8 @@ void reconnect() {
     Serial.println(mqtt_pass);
     if (mqtt.connect(mac, mqtt_user, mqtt_pass)) { // Send ID of MAC address, credentials
       Serial.println("connected");
-      mqtt.subscribe("jellyfish/+"); //we are subscribing to 'joeyData' and all subtopics below that topic
-    } else { // If it doesn't work, wait 5 seconds and try again to reconncet
+      mqtt.subscribe("jellyfish/+"); //we are subscribing to 'jellyfish' and all subtopics below that topic
+    } else { // If it doesn't work, wait 5 seconds and try again to reconnect
       Serial.print("failed, rc=");
       Serial.print(mqtt.state());
       Serial.println(" try again in 5 seconds");
@@ -328,8 +329,24 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
   }
 
   if (strcmp(topic, "jellyfish/Temperature") == 0) { // If new temperature data
-    Serial.println("Temperature updated!");
-    Serial.println(); // Line for readability
+    int temperature = root["Temperature F"].as<int>(); // read the value from the parsed string and set it to luxValue
+    if (temperature < 32) { // Change colors based on external temperature! (arbitrary values based on what I could test at home)
+      dotColor = "Snow";
+    }
+    else if (temperature < 50) {
+      dotColor = "Yellow";
+    }
+    else if (temperature < 70) {
+      dotColor = "PaleGreen";
+    }
+    else {
+      dotColor = "Aqua";
+    }
+    if (DEBUG) { // If in debug mode, print info
+      Serial.print("DOT COLOR REQUESTED: ");
+      Serial.println(dotColor);
+      Serial.println(); // Line for readability
+    }
     if (DEBUG) { // If in debug mode, print info
       root.printTo(Serial); // The parsed message
       Serial.println(); // Line for readability
@@ -403,7 +420,7 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
     Serial.println("Incoming water temperature info!");
     int waterTempValue = root["Water Temperature"].as<int>(); // read the value from the parsed string and set it to luxValue
     if (waterTempValue > 80) {
-      // Turn LED off if bright by setting light flag to false
+      // Set oceanWarming flag to true to control action
       oceanWarming = 1;
       if (DEBUG) { // If in debug mode, print info
         Serial.print("WATER TEMPERATURE FLAG: ");
@@ -426,13 +443,15 @@ void callback(char* topic, byte * payload, unsigned int length) { // Attach list
   else if (strcmp(topic, "jellyfish/Salinity") == 0) { // If new salinty data
     Serial.println("Incoming salinity info!");
     int salinity = root["Salinity"].as<int>(); // read the value from the parsed string and set it to luxValue
-    if (30 <= salinity && salinity <= 35) {
-      // Turn LED off if bright by setting light flag to false
-      idealSalinity = 1;
-      if (DEBUG) { // If in debug mode, print info
-        Serial.print("SALINITY FLAG: ");
-        Serial.println(salinity);
-        Serial.println(); // Line for readability
+    if (30 <= salinity) {
+      if (salinity <= 35) {
+        // Set idealSalinity flag to true to control action
+        idealSalinity = 1;
+        if (DEBUG) { // If in debug mode, print info
+          Serial.print("SALINITY FLAG: ");
+          Serial.println(idealSalinity);
+          Serial.println(); // Line for readability
+        }
       }
     } else {
       idealSalinity = 0;
