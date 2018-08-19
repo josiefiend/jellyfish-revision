@@ -1,4 +1,4 @@
-/* Final Project JELLYFISH
+/* Final Project JELLYFISH (Sensor)
    BMP180, VL53L0X, and TSL2561 (Temperature, distance, and light!) sensors communicate with MQTT server!
    API data to retrieve sensor IP, Geolocation, and NOAA ocean data
    The module is subscribed to MQTT channels and takes action based on messages
@@ -45,11 +45,11 @@ int waterFill; // For default LED pattern
 WiFiClient espClient; // Create ESP client
 PubSubClient mqtt(espClient); // Use for MQTT client
 char mac[6]; // MQTT needs a unique ID; we're going to use MAC address per brc class example
-char messageTemp[201]; // Array for messages; size 401, as last character in the array is the NULL character, denoting the end of the array
-char messageLight[201]; // Array for messages; size 401, as last character in the array is the NULL character, denoting the end of the array
-char messageOceanTemp[201]; // Array for messages; size 401, as last character in the array is the NULL character, denoting the end of the array
-char messageDistance[201]; // Array for messages; size 401, as last character in the array is the NULL character, denoting the end of the array
-char messageSalinity[201]; // Array for messages; size 401, as last character in the array is the NULL character, denoting the end of the array
+char messageTemp[201]; // Array for messages; size 201, as last character in the array is the NULL character, denoting the end of the array
+char messageLight[201]; // Array for messages; size 201, as last character in the array is the NULL character, denoting the end of the array
+char messageOceanTemp[201]; // Array for messages; size 201, as last character in the array is the NULL character, denoting the end of the array
+char messageDistance[201]; // Array for messages; size 201, as last character in the array is the NULL character, denoting the end of the array
+char messageSalinity[201]; // Array for messages; size 201, as last character in the array is the NULL character, denoting the end of the array
 unsigned long currentMillis, timerOne, timerTwo; // Timers to keep track of messaging intervals for MQTT & sensors
 
 // Set up data types for API data
