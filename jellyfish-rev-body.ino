@@ -17,6 +17,7 @@
 #define NUM_LEDS 60 // Number of LEDs on APA102 to control
 CRGB leds[NUM_LEDS]; // Define array of LEDs for FastLED
 #define SERVO_PIN 2  // Pin for movement
+#define BRIGHTNESS 200  // Brightness
 
 Servo myservo;  // Create servo object for movement
 
@@ -87,31 +88,38 @@ void loop() {
   // MOTION BEHAVIORS
 
   if (predatorDetected) { // If the flag is set, move the servo
-    int pos;
-    for (pos = 0; pos <= 180; pos += 1) // goes from 0 degrees to 180 degrees
-    { // in steps of 1 degree
-      myservo.write(pos); // tell servo to go to position in variable 'pos'
-      mqtt.loop(); // Check for incoming status
-    }
-    for (pos = 180; pos >= 0; pos -= 1) // goes from 180 degrees to 0 degrees
-    {
-      myservo.write(pos); // tell servo to go to position in variable 'pos'
-      mqtt.loop(); // Check for incoming status
-    }
-  }
+    predatorLED(); // Run predator pattern
+    moveServo(); // For continuous rotation servo
+    // FOR MICROSERVO
+    //    int pos;
+    //    for (pos = 0; pos <= 180; pos += 1) // goes from 0 degrees to 180 degrees
+    //    { // in steps of 1 degree
+    //      myservo.write(pos); // tell servo to go to position in variable 'pos'
+    //      mqtt.loop(); // Check for incoming status
+    //    }
+    //    for (pos = 180; pos >= 0; pos -= 1) // goes from 180 degrees to 0 degrees
+    //    {
+    //      myservo.write(pos); // tell servo to go to position in variable 'pos'
+    //      mqtt.loop(); // Check for incoming status
+    //    }
+  } else myservo.writeMicroseconds(1500);     //stop
+
   if (!idealSalinity) {
-    int pos;
-    for (pos = 0; pos <= 180; pos += 1) // goes from 0 degrees to 180 degrees
-    { // in steps of 1 degree
-      myservo.write(pos); // tell servo to go to position in variable 'pos'
-      mqtt.loop(); // Check for incoming status
-    }
-    for (pos = 180; pos >= 0; pos -= 1) // goes from 180 degrees to 0 degrees
-    {
-      myservo.write(pos); // tell servo to go to position in variable 'pos'
-      mqtt.loop(); // Check for incoming status
-    }
+     moveServo(); // For continuous rotation servo
   }
+  // FOR MICROSETVO
+  //    int pos;
+  //    for (pos = 0; pos <= 180; pos += 1) // goes from 0 degrees to 180 degrees
+  //    { // in steps of 1 degree
+  //      myservo.write(pos); // tell servo to go to position in variable 'pos'
+  //      mqtt.loop(); // Check for incoming status
+  //    }
+  //    for (pos = 180; pos >= 0; pos -= 1) // goes from 180 degrees to 0 degrees
+  //    {
+  //      myservo.write(pos); // tell servo to go to position in variable 'pos'
+  //      mqtt.loop(); // Check for incoming status
+  //    }
+  //  }
 }
 
 // COMMUNICATION FUNCTIONS
@@ -396,5 +404,17 @@ void predatorLED() {
   }
   else {
     defaultLED();
+  }
+}
+
+// SERVO
+
+void moveServo() { // This is for the continuous rotation Servo - added for Maker Faire Day 2
+  unsigned long timer = millis() - startTime;
+  if (timer < 1500) {
+    myservo.writeMicroseconds(3000);     // Turn
+  }
+  else if (timer < 3000) {
+    myservo.writeMicroseconds(0);     // Reverse
   }
 }
